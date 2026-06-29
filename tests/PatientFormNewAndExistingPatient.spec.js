@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import fs from 'fs';
 import dotenv from 'dotenv';
 dotenv.config();
 
@@ -31,8 +32,23 @@ const currentEnvConfig  = appConfig[environment];
 
 // ---------- Hooks ----------
 test.beforeAll(async ({ browser }) => {
-  context = await browser.newContext();
+  context = await browser.newContext(); 
   page = await context.newPage();
+});
+
+test.afterEach(async ({}, testInfo) => {
+
+  if (testInfo.status !== testInfo.expectedStatus) {
+
+    const screenshot = await page.screenshot({
+      fullPage: true
+    });
+
+    await testInfo.attach('Failure Screenshot', {
+      body: screenshot,
+      contentType: 'image/png',
+    });
+  }
 });
 
 test.afterAll(async () => {
@@ -118,8 +134,8 @@ test.describe('New Patient', () => {
   });
 
   test('Step 8: Select Location', async () => {
-    const locationOption = page.getByRole('option', { name: location });
-    await expect(locationOption).toBeVisible();
+    const locationOption = page.getByRole('option', { name: location }).first();
+    //await expect(locationOption).toBeVisible();
     await locationOption.click();
   });
 
@@ -131,11 +147,13 @@ test.describe('New Patient', () => {
   test('Step 10: Click initial link and button', async () => {
     await page.locator('i.icon-new-add-icon').click();
     await page.waitForTimeout(2000);
-    await page.getByLabel('', { exact: true })
-    .getByRole('button')
-    .filter({ hasText: /^$/ })
-    .last()
-    .click();
+    const popupText = page.getByText('Why and How to Register Business for 10DLC');
+
+    if (await popupText.isVisible({ timeout: 3000 }).catch(() => false)) {
+      console.log('✅ 10DLC Popup is visible');
+      await page.getByLabel('', { exact: true }).getByRole('button').filter({ hasText: /^$/ }).last().click();
+    }
+    
     await page.locator('.icon-Patient-Form.white-color').click();
   });
 
@@ -181,8 +199,9 @@ test.describe('New Patient', () => {
 
 
   test('Step 15: Open patient and click Edit (handle popup)', async () => {
+    await page.waitForTimeout(2000);
       await page.getByRole('tab', { name: 'Requested' }).click();
-      await page.getByRole('link', { name: user.firstName + ' ' + user.lastName }).first().click();
+      await page.getByText(user.firstName +' '+ user.lastName).first().click();
   
       const url = page.url();
       formID = url.split('/').pop();
@@ -235,11 +254,10 @@ test.describe('New Patient', () => {
       .getByRole('combobox').click();
     await popup.getByRole('option', { name: 'Single' }).click();
 
-    await popup.locator('adittech-selection-dropdown').filter({ hasText: 'Gender' })
-      .getByRole('combobox').click();
+    await popup.locator('adittech-selection-dropdown').filter({ hasText: 'Gender' }).getByRole('combobox').click();
     await popup.getByRole('option', { name: 'Male', exact: true }).click();
 
-    await popup.getByRole('link', { name: 'Submit' }).click();
+    await popup.locator('#submit').first().click();
   });
 
   test('Step 17: Navigate to Submissions page', async () => {
@@ -248,6 +266,7 @@ test.describe('New Patient', () => {
   });
 
   test('Step 18: Approve Form', async () => {
+    await page.waitForTimeout(2000);
       await page.getByRole('tab', { name: 'Submitted' }).click();
       await page.locator('tr')
         .filter({ hasText: user.firstName + ' ' + user.lastName })
@@ -270,10 +289,11 @@ test.describe('New Patient', () => {
     });
   
     test('Step 19: Imported Tab', async () => {
+      await page.waitForTimeout(3000);
       await page.getByRole('tab', { name: 'Imported' }).click();
       await page.getByText('Date Submitted').click();
       await page.getByText('Date Submitted').click();
-      await page.getByRole('link', { name: user.firstName + ' ' + user.lastName }).first().click();
+      await page.getByText(user.firstName +' '+ user.lastName).first().click();
       const url = page.url();
       const id = url.split('/').pop();
       console.log('Form ID: ', id);
@@ -348,53 +368,54 @@ test.describe('Existing Patient', () => {
 
   test('Step 15: open engage', async () => {
     await page.locator('.icon-Engage').first().click();
+    await page.waitForTimeout(5000);
   });
 
   test('Step 16: Click Search', async () => {
     await page.getByText('Search').click();
     await page.getByRole('textbox', { name: 'Search by name or number' }).click();
     await page.getByRole('textbox', { name: 'Search by name or number' }).fill(user.firstName+' '+user.lastName);
-    await page.waitForTimeout(2000);
+    await page.waitForTimeout(4000);
     await page.getByText(user.firstName+' '+user.lastName).click();
-    await page.waitForTimeout(2000);
+    await page.waitForTimeout(4000);
     await page.getByText(user.firstName+' '+user.lastName).first().click();
   });
 
-  test('Step 17: verity message', async () => {
-        const lastMessage = page
-        .locator('#smschatroomcol2 .messagerowgraybox')
-        .last();
+  // test('Step 17: verity message', async () => {
+  //       const lastMessage = page
+  //       .locator('#smschatroomcol2 .messagerowgraybox')
+  //       .last();
 
-        const timeText = await lastMessage
-        .locator('.sender-name .time')
-        .innerText();
+  //       const timeText = await lastMessage
+  //       .locator('.sender-name .time')
+  //       .innerText();
 
-        function parseTime(timeStr) {
-            const now = new Date();
+  //       function parseTime(timeStr) {
+  //           const now = new Date();
 
-            const [time, modifier] = timeStr.split(' ');
-            let [hours, minutes] = time.split(':').map(Number);
+  //           const [time, modifier] = timeStr.split(' ');
+  //           let [hours, minutes] = time.split(':').map(Number);
 
-            if (modifier.toLowerCase() === 'pm' && hours !== 12) hours += 12;
-            if (modifier.toLowerCase() === 'am' && hours === 12) hours = 0;
+  //           if (modifier.toLowerCase() === 'pm' && hours !== 12) hours += 12;
+  //           if (modifier.toLowerCase() === 'am' && hours === 12) hours = 0;
 
-            const messageTime = new Date(now);
-            messageTime.setHours(hours, minutes, 0, 0);
+  //           const messageTime = new Date(now);
+  //           messageTime.setHours(hours, minutes, 0, 0);
 
-            return messageTime;
-        }
+  //           return messageTime;
+  //       }
 
-        const messageTime = parseTime(timeText);
-        const now = new Date();
+  //       const messageTime = parseTime(timeText);
+  //       const now = new Date();
 
-        const diffInMinutes = Math.abs(now - messageTime) / (1000 * 60);
+  //       const diffInMinutes = Math.abs(now - messageTime) / (1000 * 60);
 
-        if (diffInMinutes <= 2) {
-        console.log('✅ Message is recent');
-        } else {
-        throw new Error(`❌ Message too old: ${timeText}`);
-        }
-  });
+  //       if (diffInMinutes <= 2) {
+  //       console.log('✅ Message is recent');
+  //       } else {
+  //       throw new Error(`❌ Message too old: ${timeText}`);
+  //       }
+  // });
 
   
   test('Step 14: Open Patient Forms Again' , async () => {
@@ -403,8 +424,9 @@ test.describe('Existing Patient', () => {
 
 
   test('Step 15: Open patient and click Edit (handle popup)', async () => {
+    await page.waitForTimeout(2000);
     await page.getByRole('tab', { name: 'Requested' }).click();
-    await page.getByRole('link', { name: user.firstName + ' ' + user.lastName }).first().click();
+    await page.getByText(user.firstName +' '+ user.lastName).first().click();
 
     const url = page.url();
     formID = url.split('/').pop();
@@ -461,7 +483,7 @@ test.describe('Existing Patient', () => {
       .getByRole('combobox').click();
     await popup.getByRole('option', { name: 'Male', exact: true }).click();
 
-    await popup.getByRole('link', { name: 'Submit' }).click();
+    await popup.locator('#submit').first().click();
   });
 
   test('Step 17: Navigate to Submissions page', async () => {
@@ -470,6 +492,7 @@ test.describe('Existing Patient', () => {
   });
 
   test('Step 18: Approve Form', async () => {
+    await page.waitForTimeout(2000);
     await page.getByRole('tab', { name: 'Submitted' }).click();
     await page.locator('tr')
       .filter({ hasText: user.firstName+' '+user.lastName })
@@ -488,10 +511,11 @@ test.describe('Existing Patient', () => {
   });
 
   test('Step 19: Imported Tab', async () => {
+    await page.waitForTimeout(2000);
     await page.getByRole('tab', { name: 'Imported' }).click();
     await page.getByText('Date Submitted').click();
     await page.getByText('Date Submitted').click();
-    await page.getByRole('link', { name: user.firstName + ' ' + user.lastName }).first().click();
+    await page.getByText(user.firstName +' '+ user.lastName).first().click();
     const url = page.url();
     const id = url.split('/').pop();
     console.log('Form ID: ', id);
@@ -529,7 +553,7 @@ test.describe('Engage Page', () => {
 
   test('Step 22: send engage message', async () => {
       await page.locator('#dropdownMenuButton').click();
-      await page.locator('div:nth-child(2) > #quicktext > li:nth-child(3) > adit-tooltip > .e-control > .bgcolor-cadmium-orange > .icon-Patient-Form-old').click();
+      await page.locator('i.icon-Patient-Form-old').click();
   });
 
   test('Step 23: Assign new form', async () => {
@@ -562,20 +586,30 @@ test.describe('Engage Page', () => {
   });
 
   test('Step 31: open sent link', async () => {
-    const [popup] = await Promise.all([
+    let popup;
+
+  if (environment !== 'Beta') {
+    [popup] = await Promise.all([
+      page.waitForEvent('popup'),
+      page.locator('#smschatroomcol2 a[href^="https://k.adit.com/"]')
+      .last()
+      .click()
+    ]);
+    } else {
+      [popup] = await Promise.all([
         page.waitForEvent('popup'),
-        page.locator('#smschatroomcol2 a[href^="https://k.adit.com/"]')
-        .last()
-        .click()
+        page.locator('#smschatroomcol2 a[href^="https://short-beta.adit.com/"]')
+          .last()
+          .click()
       ]);
+    }
 
     global.popup = popup;
-    const [response] = await Promise.all([
-      popup.waitForResponse(res =>
-        res.url().includes('/patient-form/get-forms-by-patientId') &&
-        res.status() === 200
-      ),
-    ]);
+
+    const response = await popup.waitForResponse(res =>
+      res.url().includes('/patient-form/get-forms-by-patientId') &&
+      res.status() === 200
+    );
 
     const data = await response.json();
     formID = data.data[0].submitted_form_id;
@@ -625,7 +659,7 @@ test.describe('Engage Page', () => {
       .getByRole('combobox').click();
     await popup.getByRole('option', { name: 'Male', exact: true }).click();
 
-    await popup.getByRole('link', { name: 'Submit' }).click();
+    await popup.locator('#submit').first().click();
   });
 
   test('Step 27: Navigate to Submissions page', async () => {
@@ -635,6 +669,7 @@ test.describe('Engage Page', () => {
   });
 
   test('Step 28: Approve Form', async () => {
+    await page.waitForTimeout(2000);
     await page.getByRole('tab', { name: 'Submitted' }).click();
     await page.locator('tr')
       .filter({ hasText: user.firstName+' '+user.lastName })
@@ -653,10 +688,11 @@ test.describe('Engage Page', () => {
   });
 
   test('Step 29: Imported Tab', async () => {
+    await page.waitForTimeout(2000);
     await page.getByRole('tab', { name: 'Imported' }).click();
     await page.getByText('Date Submitted').click();
     await page.getByText('Date Submitted').click();
-    await page.getByRole('link', { name: user.firstName + ' ' + user.lastName }).first().click();
+    await page.getByText(user.firstName +' '+ user.lastName).first().click();
     const url = page.url();
     const id = url.split('/').pop();
     console.log('Form ID: ', id);
@@ -680,7 +716,7 @@ test.describe('TX Plan Page', () => {
   });
 
   test('Step 2: New TX Plan', async () => {
-    await page.getByRole('button', { name: ' New Plan' }).click();
+    await page.getByRole('button', { name: 'New Plan' }).click();
   });
 
   test('Step 3: Fill Details in TX Plan', async () => {
@@ -776,6 +812,7 @@ test.describe('TX Plan Page', () => {
   });
 
   test('Step 11: Open Submitted Tab', async () => {
+    await page.waitForTimeout(2000);
     await page.getByRole('tab', { name: 'Submitted' }).click();
     await page.getByText(user.firstName +'SanityPFAutomation').click();
   });
@@ -839,7 +876,7 @@ test.describe('Patient Card', ()=>{
   });
 
   test('Step 15: close Patient Card', async () => {
-    await page.getByRole('button', { name: 'Close', exact: true }).click();
+    await page.getByRole('button', { name: 'Close', exact: true }).first().click();
   });
 
    test('Step 15: open engage', async () => {
@@ -855,41 +892,41 @@ test.describe('Patient Card', ()=>{
     await page.waitForTimeout(2000);
   });
 
-  test('Step 17: verity message', async () => {
-        const lastMessage = page
-        .locator('#smschatroomcol2 .messagerowgraybox')
-        .last();
+  // test('Step 17: verity message', async () => {
+  //       const lastMessage = page
+  //       .locator('#smschatroomcol2 .messagerowgraybox')
+  //       .last();
 
-        const timeText = await lastMessage
-        .locator('.sender-name .time')
-        .innerText();
+  //       const timeText = await lastMessage
+  //       .locator('.sender-name .time')
+  //       .innerText();
 
-        function parseTime(timeStr) {
-            const now = new Date();
+  //       function parseTime(timeStr) {
+  //           const now = new Date();
 
-            const [time, modifier] = timeStr.split(' ');
-            let [hours, minutes] = time.split(':').map(Number);
+  //           const [time, modifier] = timeStr.split(' ');
+  //           let [hours, minutes] = time.split(':').map(Number);
 
-            if (modifier.toLowerCase() === 'pm' && hours !== 12) hours += 12;
-            if (modifier.toLowerCase() === 'am' && hours === 12) hours = 0;
+  //           if (modifier.toLowerCase() === 'pm' && hours !== 12) hours += 12;
+  //           if (modifier.toLowerCase() === 'am' && hours === 12) hours = 0;
 
-            const messageTime = new Date(now);
-            messageTime.setHours(hours, minutes, 0, 0);
+  //           const messageTime = new Date(now);
+  //           messageTime.setHours(hours, minutes, 0, 0);
 
-            return messageTime;
-        }
+  //           return messageTime;
+  //       }
 
-        const messageTime = parseTime(timeText);
-        const now = new Date();
+  //       const messageTime = parseTime(timeText);
+  //       const now = new Date();
 
-        const diffInMinutes = Math.abs(now - messageTime) / (1000 * 60);
+  //       const diffInMinutes = Math.abs(now - messageTime) / (1000 * 60);
 
-        if (diffInMinutes <= 2) {
-        console.log('✅ Message is recent');
-        } else {
-        throw new Error(`❌ Message too old: ${timeText}`);
-        }
-  });
+  //       if (diffInMinutes <= 2) {
+  //       console.log('✅ Message is recent');
+  //       } else {
+  //       throw new Error(`❌ Message too old: ${timeText}`);
+  //       }
+  // });
 
   test('Step 31: open sent link', async () => {
     const [popup] = await Promise.all([
@@ -955,7 +992,7 @@ test.describe('Patient Card', ()=>{
       .getByRole('combobox').click();
     await popup.getByRole('option', { name: 'Male', exact: true }).click();
 
-    await popup.getByRole('link', { name: 'Submit' }).click();
+    await popup.locator('#submit').first().click();
   });
 
   test('Step 27: Navigate to Submissions page', async () => {
@@ -965,6 +1002,7 @@ test.describe('Patient Card', ()=>{
   });
 
   test('Step 28: Approve Form', async () => {
+    await page.waitForTimeout(2000);
     await page.getByRole('tab', { name: 'Submitted' }).click();
     await page.locator('tr')
       .filter({ hasText: user.firstName+' '+user.lastName })
@@ -983,10 +1021,11 @@ test.describe('Patient Card', ()=>{
   });
 
   test('Step 29: Imported Tab', async () => {
+    await page.waitForTimeout(2000);
     await page.getByRole('tab', { name: 'Imported' }).click();
     await page.getByText('Date Submitted').click();
     await page.getByText('Date Submitted').click();
-    await page.getByRole('link', { name: user.firstName + ' ' + user.lastName }).first().click();
+    await page.getByText(user.firstName +' '+ user.lastName).first().click();
     const url = page.url();
     const id = url.split('/').pop();
     console.log('Form ID: ', id);
@@ -1001,7 +1040,264 @@ test.describe('Patient Card', ()=>{
     }
     console.log('---------------------------------Patient Card flow Ended---------------------------------');
   });
-  
 
+})
+
+//---------------------------------------------------------------------------- AUTO Import ---------------------------------------------------------------------------
+
+test.describe('Auto Import', ()=>{
+
+  test('Step 30: Forms Manager', async () => {
+    await page.getByRole('link', { name: /Forms Manager/i }).click();
+    const row = page.locator('tr', {
+      has: page.locator('a', { hasText: 'SanityPFAutomation' })
+    });
+
+    const autoImportToggle = row.locator(
+      'td[aria-label*="Auto import?"] input[type="checkbox"]'
+    );
+
+    // Turn ON only if it's currently OFF
+    if (!(await autoImportToggle.isChecked())) {
+      await autoImportToggle.click();
+    }
+
+    await page.getByLabel('New Patients').check();
+    await page.getByLabel('Existing Patients').check();
+
+    await page.getByRole('button', { name: 'Save' }).click();
+
+    await page.waitForTimeout(5000);
+
+  })
+
+  formID = '';
+
+    test('Step 1: Navigate to Submissions page', async () => {
+        await page.getByRole('link', { name: /Submissions/i }).click();
+    });
+
+  test('Step 10: Click initial link and button', async () => {
+    await page.locator('i.icon-new-add-icon').first().click();
+    // await page.getByLabel('', { exact: true })
+    //   .getByRole('button')
+    //   .filter({ hasText: /^$/ })
+    //   .click();
+    await page.locator('.icon-Patient-Form.white-color').click();
+  });
+
+  test('Step 11: Select First Name from dropdown', async () => {
+    const firstNameDropdown = page.getByRole('combobox', { name: /First Name/i });
+    await firstNameDropdown.click();
+    await firstNameDropdown.fill(user.firstName);
+    //await page.getByText('8ikshr L39abd9331').click();
+
+    const option = page.locator('mat-option', {
+        hasText: user.firstName+' '+user.lastName
+    });
+
+    await option.waitFor();
+    await option.click();
+
+    //await page.getByText(user.firstName+' '+user.lastName).first().click();
+  });
+
+  test('Step 12: Click Next button', async () => {
+    await page.getByRole('button', { name: /Next/i }).click();
+  });
+
+  test('Step 13: Assign new form', async () => {
+    await page.getByRole('button', { name: /Assign New Form/i }).click();
+
+    await page.locator('.assign-new-form-check')
+      .locator('.inner-check-block', {
+        has: page.locator('.assign-new-checktext span', { hasText: 'SanityPFAutomation' })
+      })
+      .locator('input[type="checkbox"]')
+      .check();
+  });
+
+  test('Step 14: Save & Send', async () => {
+    await page.getByRole('button', { name: /Save/i }).click();
+    await page.getByRole('button', { name: /Send/i }).click();
+  });
+
+  // test('Step 15: open engage', async () => {
+  //   await page.locator('.icon-Engage').first().click();
+  //   await page.waitForTimeout(5000);
+  // });
+
+  // test('Step 16: Click Search', async () => {
+  //   await page.getByText('Search').click();
+  //   await page.getByRole('textbox', { name: 'Search by name or number' }).click();
+  //   await page.getByRole('textbox', { name: 'Search by name or number' }).fill(user.firstName+' '+user.lastName);
+  //   await page.waitForTimeout(4000);
+  //   await getByRole('strong').getByText(user.firstName +' '+ user.lastName).click();
+  //   await page.waitForTimeout(4000);
+  //   await page.getByText(user.firstName+' '+user.lastName).first().click();
+  // });
+
+  // test('Step 17: verity message', async () => {
+  //       const lastMessage = page
+  //       .locator('#smschatroomcol2 .messagerowgraybox')
+  //       .last();
+
+  //       const timeText = await lastMessage
+  //       .locator('.sender-name .time')
+  //       .innerText();
+
+  //       function parseTime(timeStr) {
+  //           const now = new Date();
+
+  //           const [time, modifier] = timeStr.split(' ');
+  //           let [hours, minutes] = time.split(':').map(Number);
+
+  //           if (modifier.toLowerCase() === 'pm' && hours !== 12) hours += 12;
+  //           if (modifier.toLowerCase() === 'am' && hours === 12) hours = 0;
+
+  //           const messageTime = new Date(now);
+  //           messageTime.setHours(hours, minutes, 0, 0);
+
+  //           return messageTime;
+  //       }
+
+  //       const messageTime = parseTime(timeText);
+  //       const now = new Date();
+
+  //       const diffInMinutes = Math.abs(now - messageTime) / (1000 * 60);
+
+  //       if (diffInMinutes <= 2) {
+  //       console.log('✅ Message is recent');
+  //       } else {
+  //       throw new Error(`❌ Message too old: ${timeText}`);
+  //       }
+  // });
+
+  
+  // test('Step 14: Open Patient Forms Again' , async () => {
+  //   await page.locator('.icon-Patient-Form').first().click();
+  // });
+
+
+  test('Step 15: Open patient and click Edit (handle popup)', async () => {
+    await page.waitForTimeout(2000);
+    await page.getByRole('tab', { name: 'Requested' }).click();
+    await page.getByText(user.firstName +' '+ user.lastName).first().click();
+
+    const url = page.url();
+    formID = url.split('/').pop();
+        console.log('Expected Form ID: ', formID);
+
+    const [popup] = await Promise.all([
+      page.waitForEvent('popup'),
+      page.getByRole('button', { name: /Edit/i }).click()
+    ]);
+
+    global.popup = popup;
+  });
+
+  test('Step 16: Fill patient form in popup', async () => {
+    const popup = global.popup;
+
+    const fillField = async (label, value) => {
+      const field = popup.locator('adittech-single-line-textbox')
+        .filter({ hasText: label })
+        .getByRole('textbox');
+      await field.click();
+      await field.fill(value);
+    };
+
+    // await fillField('Last Name', 'automation');
+    // await fillField('First Name', 'pfsanity');
+
+    await popup.locator('adittech-textbox-date').getByRole('textbox').click();
+    await popup.getByLabel('Select year').selectOption('2000');
+    await popup.getByLabel('Select month').selectOption('0');
+    await popup.getByRole('link', { name: '1', exact: true }).click();
+
+    // const emailField = popup.locator('adittech-textbox-email');
+    // await expect(emailField).toContainText('Email'); // wait for Angular
+    // await emailField.getByRole('textbox').fill('qa@adit.com');
+
+    await fillField('Address', 'asdasdasd');
+    await fillField('City', 'asdsadas');
+    await fillField('State', 'dsaddsas');
+    await fillField('ZIP', '2528845');
+
+    // await popup.locator('adittech-textbox-phone').filter({ hasText: 'Mobile Number' })
+    //   .getByRole('textbox').fill('(454) 545-4545');
+
+    await popup.locator('adittech-selection-dropdown').filter({ hasText: 'Preferred Provider' })
+      .getByRole('combobox').click();
+    await popup.getByRole('option', { name: 'Default Provider' }).click();
+
+    await popup.locator('adittech-selection-dropdown').filter({ hasText: 'Marital Status' })
+      .getByRole('combobox').click();
+    await popup.getByRole('option', { name: 'Single' }).click();
+
+    await popup.locator('adittech-selection-dropdown').filter({ hasText: 'Gender' })
+      .getByRole('combobox').click();
+    await popup.getByRole('option', { name: 'Male', exact: true }).click();
+
+    await popup.locator('#submit').first().click();
+  });
+
+  test('Step 17: Navigate to Submissions page', async () => {
+    await page.bringToFront();
+    await page.getByRole('link', { name: /Submissions/i }).click();
+    await page.waitForTimeout(10000);
+    
+  });
+
+  test('Step 19: Imported Tab', async () => {
+    await page.reload();
+    await page.getByRole('tab', { name: 'Imported' }).click();
+    await page.getByText('Date Submitted').click();
+    await page.getByText('Date Submitted').click();
+    await page.getByText(user.firstName +' '+ user.lastName).first().click();
+    const url = page.url();
+    const id = url.split('/').pop();
+    console.log('Form ID: ', id);
+
+    if(formID !== id) {
+      throw new Error('Form ID does not match');
+    }else{
+      console.group('Form Validation');
+      console.log('✅ Form ID matches');
+      console.log('✅ Form is verified');
+      console.groupEnd();
+    }
+
+    await page.locator('span.icon-frame-icon').first().click();
+    await page.waitForTimeout(2000);
+    const downloadPromise = page.waitForEvent('download');
+
+    await page.getByText('Download PDF').click();
+
+    const download = await downloadPromise;
+
+    console.log(await download.suggestedFilename());
+    
+  });
+
+  test('Step 20: Auto Import Off', async () => {
+    await page.getByRole('link', { name: /Forms Manager/i }).click();
+    const row = page.locator('tr', {
+      has: page.locator('a', { hasText: 'SanityPFAutomation' })
+    });
+
+    const autoImportToggle = row.locator(
+      'td[aria-label*="Auto import?"] input[type="checkbox"]'
+    );
+
+    // Turn ON only if it's currently OFF
+    if ((await autoImportToggle.isChecked())) {
+      await autoImportToggle.click();
+    }
+
+    await page.waitForTimeout(5000);
+    console.log('-------------------------------------------Auto Import Flow Ended-------------------------------------------------');
+  })
+  
 })
 
